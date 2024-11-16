@@ -185,10 +185,6 @@ func runFunc(pass *analysis.Pass, fn *ssa.Function) {
 					// x is nil, y is unknown:
 					// t successor learns y is nil.
 					newFacts = expandFacts(fact{binop.Y, isnil})
-				} else {
-					// y is nil, x is unknown:
-					// t successor learns x is nil.
-					newFacts = expandFacts(fact{binop.X, isnil})
 				}
 
 				for _, d := range b.Dominees() {
@@ -281,7 +277,6 @@ func (n nilness) String() string { return nilnessStrings[n+1] }
 // nilnessOf reports whether v is definitely nil, definitely not nil,
 // or unknown given the dominating stack of facts.
 func nilnessOf(stack []fact, v ssa.Value) nilness {
-
 	switch v := v.(type) {
 	// unwrap ChangeInterface and Slice values recursively, to detect if underlying
 	// values have any facts recorded or are otherwise known with regard to nilness.

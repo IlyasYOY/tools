@@ -30,3 +30,8 @@ func TestTypeSet(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, nilness.Analyzer, "d")
 }
+
+func TestStructPointerAndNil(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, nilness.Analyzer, "f")
+}
