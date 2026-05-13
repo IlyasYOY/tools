@@ -627,7 +627,7 @@ var actionMarkerFuncs = map[string]func(marker){
 	"rename":           actionMarkerFunc(renameMarker),
 	"renameerr":        actionMarkerFunc(renameErrMarker),
 	"selectionrange":   actionMarkerFunc(selectionRangeMarker),
-	"signature":        actionMarkerFunc(signatureMarker),
+	"signature":        actionMarkerFunc(signatureMarker, "doc"),
 	"snippet":          actionMarkerFunc(snippetMarker),
 	"subtypes":         actionMarkerFunc(subtypesMarker),
 	"supertypes":       actionMarkerFunc(supertypesMarker),
@@ -2037,6 +2037,7 @@ func tokenMarker(mark marker, loc protocol.Location, tokenType, mod string) {
 
 func signatureMarker(mark marker, src protocol.Location, label string, active int64) {
 	got := mark.run.env.SignatureHelp(src)
+	wantDoc := namedArg(mark, "doc", stringMatcher{})
 	var gotLabels []string // for better error messages
 	if got != nil {
 		for _, s := range got.Signatures {
@@ -2065,6 +2066,24 @@ func signatureMarker(mark marker, src protocol.Location, label string, active in
 	}
 	if gotActiveParameter != active {
 		mark.errorf("signatureHelp: got active parameter %d, want %d", gotActiveParameter, active)
+	}
+	if !wantDoc.empty() {
+		doc := got.Signatures[0].Documentation
+		if doc == nil {
+			mark.errorf("signatureHelp: got no documentation, want %v", wantDoc)
+			return
+		}
+		var gotDoc string
+		switch doc := doc.Value.(type) {
+		case string:
+			gotDoc = doc
+		case protocol.MarkupContent:
+			gotDoc = doc.Value
+		default:
+			mark.errorf("signatureHelp: got documentation of type %T, want string or MarkupContent", doc)
+			return
+		}
+		wantDoc.check(mark, gotDoc)
 	}
 }
 

@@ -26,7 +26,7 @@ var Bar *Foo
 
 ---
 
-Bar is a [\*Foo](file://$WORKDIR/a/a.go#3,6)
+Bar is a [\*Foo](https://pkg.go.dev/example.com/a#Foo)
 
 
 ---
@@ -39,7 +39,7 @@ var Buzz *Baz
 
 ---
 
-Buzz is a [\*Baz](file://$WORKDIR/a/a.go#5,6) with trailing space
+Buzz is a [\*Baz](https://pkg.go.dev/example.com/a#Baz) with trailing space
 
 
 ---

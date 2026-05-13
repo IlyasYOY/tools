@@ -18,6 +18,10 @@ type B struct {
 
 func (B) Bar() int { return 0 }
 
+type Inner struct{}
+
+func (Inner) Method() {}
+
 var (
 	_ = A{}.Bar() //@hover("Bar", "Bar", BarMethodCall)
 	_ = A{}.Bar //@hover("Bar", "Bar", BarMethodExpr)
@@ -26,6 +30,28 @@ var (
 	_ func(*A) int = (*A).Bar //@hover("Bar", "Bar", BarMethodValPtr)
 )
 
+-- b/b.go --
+package b
+
+import "example.com"
+
+type Outer struct {
+	a.Inner
+}
+
+func _() {
+	var o Outer
+	o.Method() //@hover("Method", "Method", ImportedPromotedMethod)
+}
+
+-- @ImportedPromotedMethod --
+```go
+func (a.Inner) Method() // through a.Inner
+```
+
+---
+
+[`(a.Inner).Method` on pkg.go.dev](https://pkg.go.dev/example.com#Inner.Method)
 -- @BarMethodCall --
 ```go
 func (B) Bar() int // through B

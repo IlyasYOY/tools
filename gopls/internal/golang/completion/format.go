@@ -260,9 +260,12 @@ Suffixes:
 		return item, nil
 	}
 
-	comment, err := golang.HoverDocForObject(ctx, c.snapshot, c.pkg.FileSet(), obj)
+	comment, docContext, err := golang.DocCommentForObject(ctx, c.snapshot, c.pkg, obj)
 	if err != nil {
 		event.Error(ctx, fmt.Sprintf("failed to find Hover for %q", obj.Name()), err)
+		return item, nil
+	}
+	if comment == nil {
 		return item, nil
 	}
 	if c.opts.fullDocumentation {
@@ -270,6 +273,7 @@ Suffixes:
 	} else {
 		item.Documentation = doc.Synopsis(comment.Text())
 	}
+	item.DocContext = docContext
 	if internalastutil.Deprecation(comment) != "" {
 		if c.snapshot.Options().CompletionTags {
 			item.Tags = []protocol.CompletionItemTag{protocol.ComplDeprecated}

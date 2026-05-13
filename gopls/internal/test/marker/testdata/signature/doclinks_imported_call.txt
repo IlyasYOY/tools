@@ -1,0 +1,36 @@
+This test checks that signature-help documentation for an imported call renders
+doc links using the declaration package and file context.
+
+-- settings.json --
+{
+	"hoverKind": "FullDocumentation"
+}
+
+-- go.mod --
+module example.com/sigdoclinksimport
+
+go 1.20
+
+-- sig.go --
+package sigdoclinks
+
+import "encoding/json"
+
+type Value struct{}
+
+// Encode marshals [Value] with [json.Marshal].
+func Encode(v Value) ([]byte, error) {
+	return json.Marshal(v)
+}
+
+-- caller/caller.go --
+package caller
+
+import "example.com/sigdoclinksimport"
+
+func _() {
+	sigdoclinks.Encode(sigdoclinks.Value{}) //@signature("Encode", "Encode(v sigdoclinks.Value) ([]byte, error)", -1, doc=EncodeDoc)
+}
+
+-- @EncodeDoc --
+Encode marshals [Value](https://pkg.go.dev/example.com/sigdoclinksimport#Value) with [json.Marshal](https://pkg.go.dev/encoding/json#Marshal).

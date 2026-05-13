@@ -278,9 +278,10 @@ Here is the list of supported action markers:
   - renameerr(location, new, wantError): specifies a renaming that
     fails with an error that matches the expectation.
 
-  - signature(location, label, active): specifies that
+  - signature(location, label, active, doc=stringMatcher): specifies that
     signatureHelp at the given location should match the provided string, with
-    the active parameter (an index) highlighted.
+    the active parameter (an index) highlighted. If doc is provided, it also
+    asserts the signature documentation.
 
   - snippet(location, string OR completionItem, snippet): executes a
     textDocument/completion request at the location, and searches for a result

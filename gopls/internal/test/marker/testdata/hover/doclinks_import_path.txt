@@ -1,0 +1,36 @@
+This test checks that hovering an import path renders doc links in the imported
+package documentation using that package's file and package context.
+
+-- settings.json --
+{
+	"hoverKind": "FullDocumentation"
+}
+
+-- go.mod --
+module example.com/doclinksimport
+
+go 1.20
+
+-- p.go --
+package p
+
+import _ "example.com/doclinksimport/dep" //@hover(`"example.com/doclinksimport/dep"`, `"example.com/doclinksimport/dep"`, dep)
+
+-- dep/dep.go --
+// Package dep links to [json.Marshal] and [Thing].
+package dep
+
+import "encoding/json"
+
+var _ = json.Marshal
+
+type Thing struct{}
+
+-- @dep --
+```go
+package dep
+```
+
+---
+
+Package dep links to [json.Marshal](https://pkg.go.dev/encoding/json#Marshal) and [Thing](https://pkg.go.dev/example.com/doclinksimport/dep#Thing).

@@ -1,0 +1,31 @@
+This test checks that completion documentation renders doc links using the
+file and package context of the completed symbol's declaration.
+
+-- settings.json --
+{
+	"hoverKind": "FullDocumentation"
+}
+
+-- go.mod --
+module example.com/completiondoclinks
+
+go 1.20
+
+-- sig/sig.go --
+package sig
+
+import jsonx "encoding/json"
+
+type Value struct{}
+
+// Encode marshals [Value] with [jsonx.Marshal].
+func Encode(v Value) ([]byte, error) { //@item(encode, "Encode", "func(v sig.Value) ([]byte, error)", "func", "Encode marshals [Value](https://pkg.go.dev/example.com/completiondoclinks/sig#Value) with [jsonx.Marshal](https://pkg.go.dev/encoding/json#Marshal).")
+	return jsonx.Marshal(v)
+}
+
+-- caller/caller.go --
+package caller
+
+import "example.com/completiondoclinks/sig"
+
+var _ = sig.Encode //@complete(re"sig\\.Enc()ode", encode)

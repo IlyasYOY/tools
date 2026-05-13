@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/gopls/internal/cache"
+	"golang.org/x/tools/gopls/internal/cache/parsego"
 	"golang.org/x/tools/gopls/internal/file"
 	"golang.org/x/tools/gopls/internal/protocol"
 	"golang.org/x/tools/gopls/internal/settings"
@@ -128,20 +129,30 @@ loop:
 		if err != nil {
 			return nil, err
 		}
-		return signatureInformation(s, snapshot.Options(), start, end, callExpr)
+		return signatureInformation(s, snapshot.Options(), start, end, callExpr, nil)
 	}
 
 	mq := MetadataQualifierForFile(snapshot, pgf.File, pkg.Metadata())
 	qual := typesinternal.FileQualifier(pgf.File, pkg.Types())
 	var (
-		comment *ast.CommentGroup
-		name    string
+		comment    *ast.CommentGroup
+		docContext *DocCommentRenderContext
+		name       string
 	)
 
 	if obj != nil {
-		comment, err = HoverDocForObject(ctx, snapshot, pkg.FileSet(), obj)
+		var declPkg *cache.Package
+		var declPGF *parsego.File
+		comment, declPkg, declPGF, err = signatureDocForObject(ctx, snapshot, pkg, obj)
 		if err != nil {
 			return nil, err
+		}
+		if comment != nil {
+			docContext = &DocCommentRenderContext{
+				pkg:           declPkg,
+				fileNode:      declPGF.File,
+				isPrivatePath: snapshot.IsGoPrivatePath,
+			}
 		}
 		name = obj.Name()
 	} else {
@@ -153,17 +164,29 @@ loop:
 		return nil, err
 	}
 	s.name = name
-	return signatureInformation(s, snapshot.Options(), start, end, callExpr)
+	return signatureInformation(s, snapshot.Options(), start, end, callExpr, docContext)
 }
 
-func signatureInformation(sig *signature, options *settings.Options, start, end token.Pos, call *ast.CallExpr) (*protocol.SignatureInformation, error) {
+func signatureDocForObject(ctx context.Context, snapshot *cache.Snapshot, pkg *cache.Package, obj types.Object) (*ast.CommentGroup, *cache.Package, *parsego.File, error) {
+	if is[*types.TypeName](obj) && is[*types.TypeParam](obj.Type()) {
+		return nil, nil, nil, nil
+	}
+	declPkg, declPGF, declPos, err := NarrowestDeclaringPackage(ctx, snapshot, pkg, obj)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("finding declaring package: %v", err)
+	}
+	decl, spec, field, assign := findDeclInfo([]*ast.File{declPGF.File}, declPos)
+	return chooseDocComment(declPGF, decl, spec, field, assign), declPkg, declPGF, nil
+}
+
+func signatureInformation(sig *signature, options *settings.Options, start, end token.Pos, call *ast.CallExpr, docContext *DocCommentRenderContext) (*protocol.SignatureInformation, error) {
 	paramInfo := make([]protocol.ParameterInformation, 0, len(sig.params))
 	for _, p := range sig.params {
 		paramInfo = append(paramInfo, protocol.ParameterInformation{Label: p})
 	}
 	return &protocol.SignatureInformation{
 		Label:           sig.name + sig.Format(),
-		Documentation:   stringToSigInfoDocumentation(sig.doc, options),
+		Documentation:   stringToSigInfoDocumentationWithContext(sig.doc, options, docContext),
 		Parameters:      paramInfo,
 		ActiveParameter: activeParameter(sig, start, end, call),
 	}, nil
@@ -198,10 +221,14 @@ func activeParameter(sig *signature, start, end token.Pos, call *ast.CallExpr) *
 }
 
 func stringToSigInfoDocumentation(s string, options *settings.Options) *protocol.Or_SignatureInformation_documentation {
+	return stringToSigInfoDocumentationWithContext(s, options, nil)
+}
+
+func stringToSigInfoDocumentationWithContext(s string, options *settings.Options, docContext *DocCommentRenderContext) *protocol.Or_SignatureInformation_documentation {
 	v := s
 	k := protocol.PlainText
 	if options.PreferredContentFormat == protocol.Markdown {
-		v = DocCommentToMarkdown(s, options)
+		v = DocCommentToMarkdownWithContext(s, options, docContext)
 		// whether or not content is newline terminated may not matter for LSP clients,
 		// but our tests expect trailing newlines to be stripped.
 		v = strings.TrimSuffix(v, "\n") // TODO(pjw): change the golden files

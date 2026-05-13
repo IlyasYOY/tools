@@ -1,0 +1,82 @@
+This test checks that hover documentation renders doc links using the file and
+package context of the declaration.
+
+-- settings.json --
+{
+	"hoverKind": "FullDocumentation"
+}
+
+-- go.mod --
+module example.com/doclinks
+
+go 1.20
+
+-- p.go --
+// Package p links to [Bar] and [json.Marshal].
+package p //@hover(re"package (p)", re"package (p)", packageP)
+
+import (
+	"bytes"
+	"encoding/json"
+	fmt2 "fmt"
+)
+
+type Foo struct {
+	// Field stores a value.
+	Field string
+}
+
+// Method prints f.
+func (Foo) Method() {}
+
+// Bar uses [json.Marshal], [fmt2.Println], [Bar], [Foo.Method], and [Foo.Field].
+func Bar() { //@hover("Bar", "Bar", Bar)
+	data, _ := json.Marshal(Foo{})
+	fmt2.Println(string(data))
+}
+
+func _() {
+	_ = bytes.Buffer{}
+
+	// localHandler builds a helper.
+	// It mentions [bytes.Buffer] so contextual doc-link rendering is exercised.
+	localHandler := func() {}
+	_ = localHandler //@hover("localHandler", "localHandler", localHandler)
+}
+
+-- @localHandler --
+```go
+var localHandler func()
+```
+
+---
+
+localHandler builds a helper. It mentions [bytes.Buffer](https://pkg.go.dev/bytes#Buffer) so contextual doc-link rendering is exercised.
+-- @Bar --
+```go
+func Bar()
+```
+
+---
+
+Bar uses [json.Marshal](https://pkg.go.dev/encoding/json#Marshal), [fmt2.Println](https://pkg.go.dev/fmt#Println), [Bar](https://pkg.go.dev/example.com/doclinks#Bar), [Foo.Method](https://pkg.go.dev/example.com/doclinks#Foo.Method), and [Foo.Field](https://pkg.go.dev/example.com/doclinks#Foo.Field).
+
+
+---
+
+[`p.Bar` on pkg.go.dev](https://pkg.go.dev/example.com/doclinks#Bar)
+-- @packageP --
+```go
+package p
+```
+
+---
+
+Package p links to [Bar](https://pkg.go.dev/example.com/doclinks#Bar) and [json.Marshal](https://pkg.go.dev/encoding/json#Marshal).
+
+
+---
+
+ - Package path: example.com/doclinks
+ - Module: example.com/doclinks
+ - Language version: go1.20

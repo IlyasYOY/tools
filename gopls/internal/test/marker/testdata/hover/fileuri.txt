@@ -88,21 +88,21 @@ func Foo()
 
 doc comment for Foo will reference the following
 
-two packages [a](file://$WORKDIR/foo/foo.go#5,5) and [b](file://$WORKDIR/foo/foo.go#6,5)
+two packages [a](https://pkg.go.dev/example.com/a) and [b](https://pkg.go.dev/example.com/b)
 
-a type [a.A](file://$WORKDIR/a/a.go#3,6)
+a type [a.A](https://pkg.go.dev/example.com/a#A)
 
-a type's field [a.A.A](file://$WORKDIR/a/a.go#4,5)
+a type's field [a.A.A](https://pkg.go.dev/example.com/a#A.A)
 
-a type's method [a.A.Bar](file://$WORKDIR/a/a.go#7,11)
+a type's method [a.A.Bar](https://pkg.go.dev/example.com/a#A.Bar)
 
-an interface [a.I](file://$WORKDIR/a/a.go#9,6)
+an interface [a.I](https://pkg.go.dev/example.com/a#I)
 
-an interface's method [a.I.Foo](file://$WORKDIR/a/a.go#10,5)
+an interface's method [a.I.Foo](https://pkg.go.dev/example.com/a#I.Foo)
 
-a const [b.B](file://$WORKDIR/b/b.go#7,7)
+a const [b.B](https://pkg.go.dev/example.com/b#B)
 
-a variable [b.V](file://$WORKDIR/b/b.go#9,5)
+a variable [b.V](https://pkg.go.dev/example.com/b#V)
 
 a doc link [xtools github website](https://github.com/golang/tools)
 
@@ -119,21 +119,21 @@ func foo.Foo()
 
 doc comment for Foo will reference the following
 
-two packages [a](file://$WORKDIR/foo/foo.go#5,5) and [b](file://$WORKDIR/foo/foo.go#6,5)
+two packages [a](https://pkg.go.dev/example.com/a) and [b](https://pkg.go.dev/example.com/b)
 
-a type [a.A](file://$WORKDIR/a/a.go#3,6)
+a type [a.A](https://pkg.go.dev/example.com/a#A)
 
-a type's field [a.A.A](file://$WORKDIR/a/a.go#4,5)
+a type's field [a.A.A](https://pkg.go.dev/example.com/a#A.A)
 
-a type's method [a.A.Bar](file://$WORKDIR/a/a.go#7,11)
+a type's method [a.A.Bar](https://pkg.go.dev/example.com/a#A.Bar)
 
-an interface [a.I](file://$WORKDIR/a/a.go#9,6)
+an interface [a.I](https://pkg.go.dev/example.com/a#I)
 
-an interface's method [a.I.Foo](file://$WORKDIR/a/a.go#10,5)
+an interface's method [a.I.Foo](https://pkg.go.dev/example.com/a#I.Foo)
 
-a const [b.B](file://$WORKDIR/b/b.go#7,7)
+a const [b.B](https://pkg.go.dev/example.com/b#B)
 
-a variable [b.V](file://$WORKDIR/b/b.go#9,5)
+a variable [b.V](https://pkg.go.dev/example.com/b#V)
 
 a doc link [xtools github website](https://github.com/golang/tools)
 

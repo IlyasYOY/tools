@@ -153,7 +153,7 @@ func toProtocolCompletionItems(candidates []completion.CompletionItem, surroundi
 			if options.PreferredContentFormat == protocol.Markdown {
 				value = protocol.MarkupContent{
 					Kind:  protocol.Markdown,
-					Value: golang.DocCommentToMarkdown(candidate.Documentation, options),
+					Value: golang.DocCommentToMarkdownWithContext(candidate.Documentation, options, candidate.DocContext),
 				}
 			} else {
 				value = candidate.Documentation

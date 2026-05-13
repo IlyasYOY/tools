@@ -7,7 +7,6 @@ package golang
 import (
 	"context"
 	"errors"
-	"fmt"
 	"go/ast"
 	"go/doc/comment"
 	"go/token"
@@ -27,33 +26,63 @@ var errNoCommentReference = errors.New("no comment reference found")
 
 // DocCommentToMarkdown converts the text of a [doc comment] to Markdown.
 //
-// TODO(adonovan): provide a package (or file imports) as context for
-// proper rendering of doc links; see [newDocCommentParser] and golang/go#61677.
+// This is the context-free fallback. Use DocCommentToMarkdownWithContext when
+// the declaring package and file are available.
 //
 // [doc comment]: https://go.dev/doc/comment
 func DocCommentToMarkdown(text string, options *settings.Options) string {
 	var parser comment.Parser
 	doc := parser.Parse(text)
+	return printDocCommentMarkdown(doc, options, func(link *comment.DocLink) string {
+		return docLinkURL(options, link.ImportPath, link)
+	})
+}
 
+// DocCommentRenderContext is the package and file context used to render
+// references in doc comments.
+type DocCommentRenderContext struct {
+	pkg           *cache.Package
+	fileNode      ast.Node
+	isPrivatePath func(string) bool
+}
+
+// DocCommentToMarkdownWithContext converts the text of a doc comment to
+// Markdown, using ctx to resolve doc links when it is available.
+func DocCommentToMarkdownWithContext(text string, options *settings.Options, ctx *DocCommentRenderContext) string {
+	if ctx == nil || ctx.pkg == nil || ctx.fileNode == nil {
+		return DocCommentToMarkdown(text, options)
+	}
+	doc := newDocCommentParser(ctx.pkg)(ctx.fileNode, text)
+	return printDocCommentMarkdown(doc, options, func(link *comment.DocLink) string {
+		path := link.ImportPath
+		if path == "" {
+			path = string(ctx.pkg.Metadata().PkgPath)
+		}
+		if ctx.isPrivatePath != nil && ctx.isPrivatePath(path) {
+			return ""
+		}
+		return docLinkURL(options, path, link)
+	})
+}
+
+func printDocCommentMarkdown(doc *comment.Doc, options *settings.Options, docLinkURL func(*comment.DocLink) string) string {
 	var printer comment.Printer
 	// The default produces {#Hdr-...} tags for headings.
 	// vscode displays them, which is undesirable.
 	// The godoc for comment.Printer says the tags
 	// avoid a security problem.
 	printer.HeadingID = func(*comment.Heading) string { return "" }
-	printer.DocLinkURL = func(link *comment.DocLink) string {
-		msg := fmt.Sprintf("https://%s/%s", options.LinkTarget, link.ImportPath)
-		if link.Name != "" {
-			msg += "#"
-			if link.Recv != "" {
-				msg += link.Recv + "."
-			}
-			msg += link.Name
-		}
-		return msg
-	}
+	printer.DocLinkURL = docLinkURL
 
 	return string(printer.Markdown(doc))
+}
+
+func docLinkURL(options *settings.Options, path string, link *comment.DocLink) string {
+	anchor := link.Name
+	if link.Recv != "" {
+		anchor = link.Recv + "." + anchor
+	}
+	return cache.BuildLink(options.LinkTarget, path, anchor)
 }
 
 // docLinkDefinition finds the definition of the doc link in comments at pos.
@@ -61,11 +90,11 @@ func DocCommentToMarkdown(text string, options *settings.Options) string {
 //
 // TODO(hxjiang): simplify the error handling.
 func docLinkDefinition(ctx context.Context, snapshot *cache.Snapshot, pkg *cache.Package, pgf *parsego.File, start, end token.Pos) ([]protocol.Location, error) {
-	obj, _, err := resolveDocLink(pkg, pgf, astutil.RangeOf(start, end))
+	obj, objPkg, _, err := resolveDocLink(ctx, snapshot, pkg, pgf, astutil.RangeOf(start, end))
 	if err != nil {
 		return nil, err
 	}
-	loc, err := ObjectLocation(ctx, pkg.FileSet(), snapshot, obj)
+	loc, err := ObjectLocation(ctx, objPkg.FileSet(), snapshot, obj)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +103,7 @@ func docLinkDefinition(ctx context.Context, snapshot *cache.Snapshot, pkg *cache
 
 // resolveDocLink parses a doc link in a comment such as [fmt.Println]
 // and returns the symbol at pos, along with the link's range.
-func resolveDocLink(pkg *cache.Package, pgf *parsego.File, rng astutil.Range) (types.Object, protocol.Range, error) {
+func resolveDocLink(ctx context.Context, snapshot *cache.Snapshot, pkg *cache.Package, pgf *parsego.File, rng astutil.Range) (types.Object, *cache.Package, protocol.Range, error) {
 	var comment *ast.CommentGroup
 	for _, c := range pgf.File.Comments {
 		if astutil.NodeContains(c, rng) {
@@ -84,23 +113,27 @@ func resolveDocLink(pkg *cache.Package, pgf *parsego.File, rng astutil.Range) (t
 	}
 
 	if comment == nil {
-		return nil, protocol.Range{}, errNoCommentReference
+		return nil, nil, protocol.Range{}, errNoCommentReference
 	}
 
 	for docLink := range commentDocLinks(comment) {
 		if astutil.NodeContains(docLink.partRange, rng) {
-			if obj := lookupDocLinkSymbol(pkg, pgf, docLink.nameText); obj != nil {
+			obj, objPkg, err := lookupDocLinkSymbol(ctx, snapshot, pkg, pgf, docLink.nameText)
+			if err != nil {
+				return nil, nil, protocol.Range{}, err
+			}
+			if obj != nil {
 				rng, err := pgf.NodeRange(docLink.partRange)
 				if err != nil {
-					return nil, protocol.Range{}, err
+					return nil, nil, protocol.Range{}, err
 				}
-				return obj, rng, nil
+				return obj, objPkg, rng, nil
 			}
 			break
 		}
 	}
 
-	return nil, protocol.Range{}, errNoCommentReference
+	return nil, nil, protocol.Range{}, errNoCommentReference
 }
 
 // A docLink holds the parsed information for a single resolution step of a
@@ -185,7 +218,7 @@ func commentDocLinks(cg *ast.CommentGroup) iter.Seq[docLink] {
 
 // lookupDocLinkSymbol returns the symbol denoted by a doc link such
 // as "fmt.Println" or "bytes.Buffer.Write" in the specified file.
-func lookupDocLinkSymbol(pkg *cache.Package, pgf *parsego.File, name string) types.Object {
+func lookupDocLinkSymbol(ctx context.Context, snapshot *cache.Snapshot, pkg *cache.Package, pgf *parsego.File, name string) (types.Object, *cache.Package, error) {
 	scope := pkg.Types().Scope()
 
 	prefix, suffix, _ := strings.Cut(name, ".")
@@ -198,7 +231,7 @@ func lookupDocLinkSymbol(pkg *cache.Package, pgf *parsego.File, name string) typ
 		//  - A non-compiled Go file (such as unsafe.go) won't be in Scopes.
 		//  - A (technically) compiled go file with the wrong package name won't be
 		//    in Scopes, as it will be skipped by go/types.
-		return nil
+		return nil, nil, nil
 	}
 	pkgname, ok := fileScope.Lookup(prefix).(*types.PkgName) // ok => prefix is imported name
 	if !ok {
@@ -216,20 +249,26 @@ func lookupDocLinkSymbol(pkg *cache.Package, pgf *parsego.File, name string) typ
 	if pkgname != nil {
 		scope = pkgname.Imported().Scope()
 		if suffix == "" {
-			return pkgname // not really a valid doc link
+			return pkgname, pkg, nil // not really a valid doc link
 		}
 		name = suffix
 	}
 
-	// TODO(adonovan): try searching the forward closure for packages
-	// that define the symbol but are not directly imported;
-	// see https://github.com/golang/go/issues/61677
+	if obj := lookupDocLinkSymbolInScope(scope, name, true); obj != nil {
+		return obj, pkg, nil
+	}
+	if pkgname == nil {
+		return lookupDocLinkSymbolInDeps(ctx, snapshot, pkg, prefix, suffix)
+	}
+	return nil, nil, nil
+}
 
+func lookupDocLinkSymbolInScope(scope *types.Scope, name string, allowUniverse bool) types.Object {
 	// Field or sel?
 	recv, sel, ok := strings.Cut(name, ".")
 	if ok {
 		obj := scope.Lookup(recv) // package scope
-		if obj == nil {
+		if obj == nil && allowUniverse {
 			obj = types.Universe.Lookup(recv)
 		}
 		obj, ok := obj.(*types.TypeName)
@@ -243,7 +282,59 @@ func lookupDocLinkSymbol(pkg *cache.Package, pgf *parsego.File, name string) typ
 	if obj := scope.Lookup(name); obj != nil {
 		return obj // package-level symbol
 	}
-	return types.Universe.Lookup(name) // built-in symbol
+	if allowUniverse {
+		return types.Universe.Lookup(name) // built-in symbol
+	}
+	return nil
+}
+
+func lookupDocLinkSymbolInDeps(ctx context.Context, snapshot *cache.Snapshot, pkg *cache.Package, prefix, suffix string) (types.Object, *cache.Package, error) {
+	if suffix == "" {
+		return nil, nil, nil
+	}
+
+	graph, err := snapshot.LoadMetadataGraph(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var ids []cache.PackageID
+	for mp := range graph.ForwardReflexiveTransitiveClosure(pkg.Metadata().ID) {
+		if mp.ID == pkg.Metadata().ID {
+			continue
+		}
+		if string(mp.Name) == prefix || pathpkg.Base(trimVersionSuffix(string(mp.PkgPath))) == prefix {
+			ids = append(ids, mp.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, nil, nil
+	}
+
+	pkgs, err := snapshot.TypeCheck(ctx, ids...)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var (
+		found    types.Object
+		foundPkg *cache.Package
+	)
+	for _, depPkg := range pkgs {
+		if depPkg == nil {
+			continue
+		}
+		obj := lookupDocLinkSymbolInScope(depPkg.Types().Scope(), suffix, false)
+		if obj == nil {
+			continue
+		}
+		if found != nil {
+			return nil, nil, nil // ambiguous
+		}
+		found = obj
+		foundPkg = depPkg
+	}
+	return found, foundPkg, nil
 }
 
 // newDocCommentParser returns a function that parses [doc comments],
@@ -253,9 +344,6 @@ func lookupDocLinkSymbol(pkg *cache.Package, pgf *parsego.File, name string) typ
 // that encloses fileNode.
 //
 // The resulting function is not concurrency safe.
-//
-// See issue #61677 for how this might be generalized to support
-// correct contextual parsing of doc comments in Hover too.
 //
 // [doc comment]: https://go.dev/doc/comment
 func newDocCommentParser(pkg *cache.Package) func(fileNode ast.Node, text string) *comment.Doc {
@@ -319,7 +407,7 @@ func newDocCommentParser(pkg *cache.Package) func(fileNode ast.Node, text string
 				return false
 			}
 			m, _, _ := types.LookupFieldOrMethod(tname.Type(), true, pkg.Types(), name)
-			return is[*types.Func](m)
+			return m != nil
 		},
 	}
 	return func(fileNode ast.Node, text string) *comment.Doc {

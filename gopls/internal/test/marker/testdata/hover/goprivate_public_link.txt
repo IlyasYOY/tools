@@ -1,0 +1,45 @@
+This test checks that hover doc links to private packages are rendered as plain
+text while public doc links remain linked.
+
+-- env --
+GOPRIVATE=mod.com
+
+-- go.mod --
+module mod.com
+
+go 1.20
+
+-- p.go --
+package p
+
+import (
+	"encoding/json"
+
+	"mod.com/lib"
+)
+
+type U struct{}
+
+var _ = json.Marshal
+var _ = lib.L{}
+
+// T should not link private targets, but should preserve public doc links.
+//
+// T also references [U], [lib.L], and [json.Marshal].
+type T struct{} //@hover("T", "T", T)
+
+-- lib/lib.go --
+package lib
+
+type L struct{}
+
+-- @T --
+```go
+type T struct{} // size=0
+```
+
+---
+
+T should not link private targets, but should preserve public doc links.
+
+T also references U, lib.L, and [json.Marshal](https://pkg.go.dev/encoding/json#Marshal).

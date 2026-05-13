@@ -47,7 +47,8 @@ import (
 // A CompletionItem represents a possible completion suggested by the algorithm.
 type CompletionItem struct {
 
-	// Invariant: CompletionItem does not refer to syntax or types.
+	// Invariant: CompletionItem does not refer to syntax or types, other than
+	// the optional opaque doc rendering context.
 
 	// Label is the primary text the user sees for this completion item.
 	Label string
@@ -100,6 +101,11 @@ type CompletionItem struct {
 
 	// Documentation is the documentation for the completion item.
 	Documentation string
+
+	// DocContext is the package and file context for rendering doc links in
+	// Documentation. It is set only when Documentation came from an object
+	// declaration comment.
+	DocContext *golang.DocCommentRenderContext
 
 	// isSlice reports whether the underlying type of the object
 	// from which this candidate was derived is a slice.
