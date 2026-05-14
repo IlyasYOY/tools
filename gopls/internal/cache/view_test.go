@@ -59,6 +59,28 @@ func TestInVendor(t *testing.T) {
 	}
 }
 
+// Keep GOPRIVATE matching in sync with the go command, where GOPRIVATE is a
+// comma-separated list of module path prefix patterns and trailing slashes on
+// patterns are ignored.
+//
+// See:
+//   - https://pkg.go.dev/cmd/go#hdr-Configuration_for_downloading_non_public_code
+//   - https://pkg.go.dev/golang.org/x/mod/module#MatchPrefixPatterns.
+func TestGlobsMatchPathGOPRIVATETrailingSlash(t *testing.T) {
+	for _, tt := range []struct {
+		target string
+		want   bool
+	}{
+		{"mod.com", true},
+		{"mod.com/lib", true},
+		{"other.com/lib", false},
+	} {
+		if got := globsMatchPath("mod.com/", tt.target); got != tt.want {
+			t.Errorf("globsMatchPath(%q, %q) = %t, want %t", "mod.com/", tt.target, got, tt.want)
+		}
+	}
+}
+
 func TestFilters(t *testing.T) {
 	tests := []struct {
 		filters  []string

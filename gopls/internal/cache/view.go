@@ -1225,6 +1225,7 @@ func globsMatchPath(globs, target string) bool {
 		} else {
 			glob, globs = globs, ""
 		}
+		glob = strings.TrimSuffix(glob, "/")
 		if glob == "" {
 			continue
 		}
